@@ -546,7 +546,7 @@ function initAudio() {
   masterGain = ctx.createGain(); masterGain.gain.value = 0.78;
   masterGain.connect(ctx.destination);
 
-  bgGain = ctx.createGain(); bgGain.gain.value = 0.58;
+  bgGain = ctx.createGain(); bgGain.gain.value = 0.72;
   bgGain.connect(masterGain);
 
   cueGain = ctx.createGain(); cueGain.gain.value = 0.42;
@@ -633,8 +633,8 @@ function scheduleMelody() {
   // Bowl-like timbre: fundamental + 2 inharmonic partials
   const mG = ctx.createGain();
   mG.gain.setValueAtTime(0.001, t);
-  mG.gain.linearRampToValueAtTime(0.065, t + 1.2);   // slow swell
-  mG.gain.setValueAtTime(0.065, t + dur * 0.4);
+  mG.gain.linearRampToValueAtTime(0.18, t + 1.2);   // slow swell
+  mG.gain.setValueAtTime(0.18, t + dur * 0.4);
   mG.gain.exponentialRampToValueAtTime(0.001, t + dur);
   mG.connect(bgGain);
 
@@ -1070,13 +1070,16 @@ function tick(ts) {
 // ---- Session control ----
 function startSession() {
   initAudio();
+  ensureBuffers(); // generate buffers synchronously (buffers pre-generated on first touch, this is a no-op)
 
-  // iOS: play a silent buffer synchronously to guarantee audio unlock
+  // iOS: play silent buffer + resume SYNCHRONOUSLY in user-gesture context
+  // iOS ignores ctx.resume() called from .then() — must be synchronous here
   try {
     const sb = ctx.createBuffer(1, 1, ctx.sampleRate);
     const ss = ctx.createBufferSource(); ss.buffer = sb;
     ss.connect(ctx.destination); ss.start(0);
   } catch(e) {}
+  ctx.resume(); // intentionally NOT awaited — iOS needs this synchronous call
 
   S.running = true; S.paused = false;
   S.totalSecs = S.totalMinutes * 60;
@@ -1088,17 +1091,14 @@ function startSession() {
   document.getElementById('pauseBtn').disabled = false;
   document.getElementById('stopBtn').disabled  = false;
 
-  // iOS: generate buffers AFTER resume, then start audio
-  ctx.resume().then(() => {
-    ensureBuffers();          // heavy work happens here, after context is live
+  // Small delay to let ctx.resume() take effect before scheduling audio
+  setTimeout(() => {
     startBg(S.preset);
-    setTimeout(() => {
-      setPhaseAnim('inhale', S.inhaleDur);
-      playCue('inhale', S.preset);
-      updateDisplay();
-      S.raf = requestAnimationFrame(tick);
-    }, 900);                  // slightly longer grace period for buffer generation
-  }).catch(e => console.warn('AudioContext resume failed:', e));
+    setPhaseAnim('inhale', S.inhaleDur);
+    playCue('inhale', S.preset);
+    updateDisplay();
+    S.raf = requestAnimationFrame(tick);
+  }, 300);
 }
 
 function pauseSession() {
@@ -1193,6 +1193,19 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
   });
 });
 
+// iOS: touchstart fires before click — call resume synchronously inside gesture handler
+// This is the most reliable way to unblock audio on iOS Safari
+document.getElementById('startBtn').addEventListener('touchstart', () => {
+  initAudio();
+  ensureBuffers();
+  try {
+    const sb = ctx.createBuffer(1, 1, ctx.sampleRate);
+    const ss = ctx.createBufferSource(); ss.buffer = sb;
+    ss.connect(ctx.destination); ss.start(0);
+  } catch(e) {}
+  ctx.resume();
+}, { passive: true });
+
 document.getElementById('startBtn').addEventListener('click', startSession);
 document.getElementById('pauseBtn').addEventListener('click', pauseSession);
 document.getElementById('stopBtn').addEventListener('click',  stopSession);
@@ -1208,6 +1221,7 @@ updateSliderFill(exhaleSlider);
 (function() {
   function iosUnlock() {
     initAudio();
+    ensureBuffers(); // pre-generate noise buffers on first touch (avoids delay at Start press)
     const silBuf = ctx.createBuffer(1, 1, ctx.sampleRate);
     const silSrc = ctx.createBufferSource();
     silSrc.buffer = silBuf;
