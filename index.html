@@ -552,14 +552,19 @@ function initAudio() {
   cueGain = ctx.createGain(); cueGain.gain.value = 0.42;
   cueGain.connect(masterGain);
 
-  // Convolution reverb for cue sounds
+  // Convolution reverb — small buffer, safe to do here
   reverbNode = createReverb();
   reverbNode.connect(cueGain);
 
-  // Pre-generate noise buffers
-  noiseBuffers.brown = makeNoiseBuf(8, 'brown');
-  noiseBuffers.pink  = makeNoiseBuf(7, 'pink');
-  noiseBuffers.white = makeNoiseBuf(4, 'white');
+  // NOTE: noise buffers are generated AFTER ctx.resume() — see ensureBuffers()
+}
+
+// Called only after ctx.resume() resolves (iOS requirement)
+function ensureBuffers() {
+  if (noiseBuffers.brown) return;
+  noiseBuffers.brown = makeNoiseBuf(4, 'brown');
+  noiseBuffers.pink  = makeNoiseBuf(4, 'pink');
+  noiseBuffers.white = makeNoiseBuf(2, 'white');
 }
 
 function makeNoiseBuf(secs, type) {
@@ -592,7 +597,7 @@ function makeNoiseBuf(secs, type) {
 function createReverb() {
   const conv = ctx.createConvolver();
   const sr = ctx.sampleRate;
-  const len = Math.floor(sr * 2.8);
+  const len = Math.floor(sr * 1.5);
   const buf = ctx.createBuffer(2, len, sr);
   for (let c = 0; c < 2; c++) {
     const d = buf.getChannelData(c);
@@ -724,137 +729,185 @@ function startBgChime(t) {
 }
 
 // ---- Cue Sounds ----
+// Design principle:
+//   들숨(inhale): sound SWELLS in — volume builds, matching the filling breath
+//   날숨(exhale): sound STRIKES then fades — clear attack, slow release
+// Both sounds last the full breath duration so eyes-closed users always know their phase.
 
 function playCue(type, preset) {
   if (!ctx) return;
-  const t = ctx.currentTime + 0.06;
+  const t   = ctx.currentTime + 0.06;
+  const dur = Math.max(3, type === 'inhale' ? S.inhaleDur : S.exhaleDur);
   ({
     waves:   playWavesCue,
     bowl:    playBowlCue,
     crystal: playCrystalCue,
     nature:  playNatureCue,
     chime:   playChimeCue,
-  }[preset] || playBowlCue)(type, t);
+  }[preset] || playBowlCue)(type, t, dur);
 }
 
-function bowlStrike(freq, dur, t) {
-  // Inharmonic partials mimicking a metal bowl
+// Inharmonic bowl oscillators with envelope shaped by phase type
+function bowlTone(freq, dur, t, isInhale) {
   const parts = [[1,1],[2.756,0.42],[5.404,0.18],[8.933,0.07]];
   const mG = ctx.createGain();
-  mG.gain.setValueAtTime(0.001, t);
-  mG.gain.exponentialRampToValueAtTime(0.32, t + 0.012);
-  mG.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  if (isInhale) {
+    // Swell in: quiet → peak at 40% → fade (폐가 차오름)
+    mG.gain.setValueAtTime(0.001, t);
+    mG.gain.linearRampToValueAtTime(0.52, t + dur * 0.4);
+    mG.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  } else {
+    // Strike then fade: instant attack → long release (공기가 빠져나감)
+    mG.gain.setValueAtTime(0.001, t);
+    mG.gain.exponentialRampToValueAtTime(0.52, t + 0.014);
+    mG.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  }
   mG.connect(reverbNode);
   parts.forEach(([r, a]) => {
     const o = ctx.createOscillator(); o.frequency.value = freq * r; o.type = 'sine';
     const g = ctx.createGain(); g.gain.value = a;
     o.connect(g); g.connect(mG);
-    o.start(t); o.stop(t + dur + 0.1);
+    o.start(t); o.stop(t + dur + 0.2);
   });
 }
 
-function playBowlCue(type, t) {
-  bowlStrike(type === 'inhale' ? 392 : 196, type === 'inhale' ? 4.5 : 6, t);
+function playBowlCue(type, t, dur) {
+  // 들숨: G4 (392Hz) — bright, high     날숨: G3 (196Hz) — deep, round
+  bowlTone(type === 'inhale' ? 392 : 196, dur, t, type === 'inhale');
 }
 
-function playWavesCue(type, t) {
-  const dur = type === 'inhale' ? 2.8 : 2.2;
-  const src = ctx.createBufferSource(); src.buffer = noiseBuffers.white;
-  const bp  = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9;
-  const g   = ctx.createGain();
-  g.gain.setValueAtTime(0.001, t);
-  g.gain.linearRampToValueAtTime(0.38, t + dur*0.45);
-  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  bp.frequency.setValueAtTime(type==='inhale' ? 380 : 1300, t);
-  bp.frequency.exponentialRampToValueAtTime(type==='inhale' ? 1300 : 300, t + dur);
-  src.connect(bp); bp.connect(g); g.connect(reverbNode);
-  src.start(t); src.stop(t + dur + 0.3);
+function playWavesCue(type, t, dur) {
+  // 들숨: filter sweeps LOW→HIGH (wave rushing in, building)
+  // 날숨: filter sweeps HIGH→LOW (wave receding, releasing)
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffers.white; src.loop = true;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8;
+  const g  = ctx.createGain();
 
-  // Gentle tone underneath
-  const tone = ctx.createOscillator(); tone.frequency.value = type==='inhale' ? 220 : 164;
-  const tG   = ctx.createGain();
+  if (type === 'inhale') {
+    bp.frequency.setValueAtTime(300, t);
+    bp.frequency.exponentialRampToValueAtTime(1400, t + dur * 0.85);
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(0.40, t + dur * 0.5);   // swell in
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  } else {
+    bp.frequency.setValueAtTime(1400, t);
+    bp.frequency.exponentialRampToValueAtTime(280, t + dur * 0.85);
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(0.40, t + 0.1);    // quick start
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  }
+  src.connect(bp); bp.connect(g); g.connect(reverbNode);
+  src.start(t); src.stop(t + dur + 0.2);
+
+  // Underlying tone: rising for inhale, falling for exhale
+  const tone = ctx.createOscillator();
+  tone.frequency.setValueAtTime(type === 'inhale' ? 160 : 260, t);
+  tone.frequency.exponentialRampToValueAtTime(type === 'inhale' ? 260 : 130, t + dur * 0.8);
+  const tG = ctx.createGain();
   tG.gain.setValueAtTime(0.001, t);
-  tG.gain.linearRampToValueAtTime(0.1, t + 0.35);
+  tG.gain.linearRampToValueAtTime(type === 'inhale' ? 0.10 : 0.12, t + (type === 'inhale' ? dur*0.4 : 0.1));
   tG.gain.exponentialRampToValueAtTime(0.001, t + dur);
   tone.connect(tG); tG.connect(reverbNode);
-  tone.start(t); tone.stop(t + dur + 0.2);
+  tone.start(t); tone.stop(t + dur + 0.1);
 }
 
-function playCrystalCue(type, t) {
-  // Solfeggio: 741 (inhale - expression) vs 396 (exhale - release)
-  const freq = type === 'inhale' ? 741 : 396;
-  const dur  = type === 'inhale' ? 4   : 5;
+function playCrystalCue(type, t, dur) {
+  // 들숨: 528Hz (생명의 주파수) — swell     날숨: 396Hz (해방의 주파수) — strike+fade
+  const freq = type === 'inhale' ? 528 : 396;
   const mG   = ctx.createGain();
-  mG.gain.setValueAtTime(0.001, t);
-  mG.gain.exponentialRampToValueAtTime(0.22, t + 0.04);
-  mG.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  if (type === 'inhale') {
+    mG.gain.setValueAtTime(0.001, t);
+    mG.gain.linearRampToValueAtTime(0.28, t + dur * 0.45);
+    mG.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  } else {
+    mG.gain.setValueAtTime(0.001, t);
+    mG.gain.exponentialRampToValueAtTime(0.30, t + 0.03);
+    mG.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  }
   mG.connect(reverbNode);
   [1, 2, 3, 4].forEach((h, i) => {
     const o = ctx.createOscillator(); o.frequency.value = freq * h; o.type = 'sine';
-    const g = ctx.createGain(); g.gain.value = [1, 0.28, 0.10, 0.04][i];
+    const g = ctx.createGain(); g.gain.value = [1, 0.30, 0.12, 0.05][i];
     o.connect(g); g.connect(mG);
-    o.start(t); o.stop(t + dur + 0.15);
+    o.start(t); o.stop(t + dur + 0.2);
   });
 }
 
-function playNatureCue(type, t) {
+function playNatureCue(type, t, dur) {
   if (type === 'inhale') {
-    // Bird-like ascending chirp
-    const o = ctx.createOscillator(); o.type = 'sine';
-    o.frequency.setValueAtTime(620, t);
-    o.frequency.exponentialRampToValueAtTime(1850, t + 0.28);
-    o.frequency.exponentialRampToValueAtTime(1200, t + 0.55);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.001, t);
-    g.gain.linearRampToValueAtTime(0.18, t + 0.05);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
-    o.connect(g); g.connect(reverbNode);
-    o.start(t); o.stop(t + 0.9);
-    // Second chirp with delay
-    setTimeout(() => {
-      const t2 = ctx.currentTime + 0.06;
-      const o2 = ctx.createOscillator(); o2.type = 'sine';
-      o2.frequency.setValueAtTime(800, t2);
-      o2.frequency.exponentialRampToValueAtTime(2000, t2 + 0.22);
-      const g2 = ctx.createGain();
-      g2.gain.setValueAtTime(0.001, t2);
-      g2.gain.linearRampToValueAtTime(0.12, t2 + 0.04);
-      g2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.5);
-      o2.connect(g2); g2.connect(reverbNode);
-      o2.start(t2); o2.stop(t2 + 0.7);
-    }, 420);
+    // 들숨: 새소리 (상승) + 뒤이어 지속되는 바람 소리로 채움
+    const chirpFreqs = [[620,1850,1200,0],[800,2000,1400,0.4]];
+    chirpFreqs.forEach(([f0, f1, f2, delay]) => {
+      const st = t + delay;
+      const o = ctx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(f0, st);
+      o.frequency.exponentialRampToValueAtTime(f1, st + 0.25);
+      o.frequency.exponentialRampToValueAtTime(f2, st + 0.5);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.001, st);
+      g.gain.linearRampToValueAtTime(0.20, st + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.7);
+      o.connect(g); g.connect(reverbNode);
+      o.start(st); o.stop(st + 0.9);
+    });
+    // Sustained rising wind to fill the rest
+    const wind = ctx.createBufferSource(); wind.buffer = noiseBuffers.pink; wind.loop = true;
+    const hf = ctx.createBiquadFilter(); hf.type = 'bandpass';
+    hf.frequency.setValueAtTime(600, t + 0.8);
+    hf.frequency.linearRampToValueAtTime(1200, t + dur);
+    const wg = ctx.createGain();
+    wg.gain.setValueAtTime(0.001, t + 0.6);
+    wg.gain.linearRampToValueAtTime(0.12, t + dur * 0.5);
+    wg.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    wind.connect(hf); hf.connect(wg); wg.connect(reverbNode);
+    wind.start(t + 0.6); wind.stop(t + dur + 0.1);
   } else {
-    // Wind-like descending rustle
-    const src = ctx.createBufferSource(); src.buffer = noiseBuffers.pink;
+    // 날숨: 바람 소리 하강 — 강하게 시작, 서서히 사라짐
+    const src = ctx.createBufferSource(); src.buffer = noiseBuffers.pink; src.loop = true;
     const hp  = ctx.createBiquadFilter(); hp.type = 'highpass';
-    hp.frequency.setValueAtTime(2200, t);
-    hp.frequency.exponentialRampToValueAtTime(380, t + 2.5);
+    hp.frequency.setValueAtTime(1800, t);
+    hp.frequency.exponentialRampToValueAtTime(300, t + dur * 0.8);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.001, t);
-    g.gain.linearRampToValueAtTime(0.14, t + 0.28);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 2.5);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     src.connect(hp); hp.connect(g); g.connect(reverbNode);
-    src.start(t); src.stop(t + 3);
+    src.start(t); src.stop(t + dur + 0.1);
   }
 }
 
-function playChimeCue(type, t) {
-  // Ascending or descending arpeggio
-  const up   = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
-  const down  = [261.63, 329.63, 392.00, 523.25]; // C4 E4 G4 C5
-  const freqs = type === 'inhale' ? up : down;
-  freqs.forEach((f, i) => {
-    const delay = i * 0.09;
-    const dur   = 3.2 - i * 0.25;
-    const st    = t + delay;
-    const o = ctx.createOscillator(); o.frequency.value = f; o.type = 'sine';
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.001, st);
-    g.gain.exponentialRampToValueAtTime(0.19 - i*0.03, st + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.001, st + dur);
-    o.connect(g); g.connect(reverbNode);
-    o.start(st); o.stop(st + dur + 0.15);
-  });
+function playChimeCue(type, t, dur) {
+  if (type === 'inhale') {
+    // 들숨: 상행 아르페지오 (C→E→G→C) — 각각 길게 울림, 점점 커짐
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+      const st = t + i * 0.12;
+      const o  = ctx.createOscillator(); o.frequency.value = f; o.type = 'sine';
+      const g  = ctx.createGain();
+      const peakT = st + Math.min(dur * 0.3, 1.5);
+      g.gain.setValueAtTime(0.001, st);
+      g.gain.linearRampToValueAtTime(0.05 + i * 0.05, st + 0.02);  // each note a bit louder
+      g.gain.linearRampToValueAtTime(0.10 + i * 0.06, peakT);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g); g.connect(reverbNode);
+      o.start(st); o.stop(t + dur + 0.2);
+    });
+  } else {
+    // 날숨: 깊은 단일 종소리 (C3) — 강하게 치고 긴 울림으로 사라짐
+    const freq = 130.81; // C3 — deep, round
+    const parts = [[1,1],[2.756,0.35],[5.404,0.14]];
+    const mG = ctx.createGain();
+    mG.gain.setValueAtTime(0.001, t);
+    mG.gain.exponentialRampToValueAtTime(0.55, t + 0.015);
+    mG.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    mG.connect(reverbNode);
+    parts.forEach(([r, a]) => {
+      const o = ctx.createOscillator(); o.frequency.value = freq * r; o.type = 'sine';
+      const g = ctx.createGain(); g.gain.value = a;
+      o.connect(g); g.connect(mG);
+      o.start(t); o.stop(t + dur + 0.2);
+    });
+  }
 }
 
 
@@ -980,16 +1033,17 @@ function startSession() {
   document.getElementById('pauseBtn').disabled = false;
   document.getElementById('stopBtn').disabled  = false;
 
-  // iOS: ctx.resume() is async — ALL audio must start inside .then()
+  // iOS: generate buffers AFTER resume, then start audio
   ctx.resume().then(() => {
+    ensureBuffers();          // heavy work happens here, after context is live
     startBg(S.preset);
     setTimeout(() => {
       setPhaseAnim('inhale', S.inhaleDur);
       playCue('inhale', S.preset);
       updateDisplay();
       S.raf = requestAnimationFrame(tick);
-    }, 600);
-  });
+    }, 900);                  // slightly longer grace period for buffer generation
+  }).catch(e => console.warn('AudioContext resume failed:', e));
 }
 
 function pauseSession() {
@@ -1081,7 +1135,7 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     S.preset = btn.dataset.preset;
-    if (S.running && !S.paused) startBg(S.preset); // swap bg live
+    if (S.running && !S.paused) { ensureBuffers(); startBg(S.preset); }
   });
 });
 
