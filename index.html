@@ -126,8 +126,8 @@ header .sub {
 
 .breath-wrap {
   position: relative;
-  width: 220px;
-  height: 220px;
+  width: 170px;
+  height: 170px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -146,12 +146,12 @@ header .sub {
   transition: transform 0.6s ease, border-color 0.8s ease;
 }
 .ring-2 {
-  inset: 22px;
+  inset: 17px;
   border: 1px solid rgba(100, 170, 220, 0.18);
   transition: transform 0.6s ease;
 }
 .ring-3 {
-  inset: 44px;
+  inset: 34px;
   border: 1.5px solid rgba(100, 170, 220, 0.3);
   background: radial-gradient(circle, rgba(50, 120, 180, 0.12) 0%, rgba(20, 60, 120, 0.06) 60%, transparent 100%);
   box-shadow: 0 0 30px rgba(60, 140, 220, 0.1), inset 0 0 30px rgba(60, 140, 220, 0.05);
@@ -214,7 +214,7 @@ header .sub {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: 14px;
-  padding: 16px;
+  padding: 20px;
   margin-top: 14px;
   transition: opacity 0.4s ease;
 }
@@ -227,16 +227,16 @@ header .sub {
 .srow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 .srow:last-child { margin-bottom: 0; }
 
 .slabel {
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
+  font-size: 0.92rem;
+  letter-spacing: 0.05em;
   color: var(--text-muted);
-  width: 48px;
+  width: 58px;
   flex-shrink: 0;
 }
 
@@ -251,7 +251,7 @@ header .sub {
 input[type="range"] {
   -webkit-appearance: none;
   flex: 1;
-  height: 3px;
+  height: 4px;
   background: linear-gradient(90deg, rgba(80, 160, 240, 0.5) var(--pct, 0%), rgba(255,255,255,0.1) var(--pct, 0%));
   border-radius: 2px;
   outline: none;
@@ -282,9 +282,9 @@ input[type="range"]::-moz-range-thumb {
 .preset-btn { touch-action: manipulation; }
 
 .sval {
-  font-size: 0.76rem;
+  font-size: 0.95rem;
   color: rgba(180, 210, 235, 0.7);
-  width: 28px;
+  width: 34px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -301,11 +301,11 @@ input[type="range"]::-moz-range-thumb {
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.09);
   border-radius: 20px;
-  padding: 4px 10px;
-  font-size: 0.7rem;
+  padding: 7px 13px;
+  font-size: 0.86rem;
   color: var(--text-muted);
   cursor: pointer;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   font-family: inherit;
   transition: all 0.2s ease;
   white-space: nowrap;
@@ -331,15 +331,15 @@ input[type="range"]::-moz-range-thumb {
 .tpick-btn {
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 7px;
-  width: 26px;
-  height: 26px;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   color: rgba(180, 210, 235, 0.6);
-  font-size: 1.05rem;
+  font-size: 1.25rem;
   font-family: inherit;
   transition: all 0.15s ease;
   flex-shrink: 0;
@@ -351,10 +351,10 @@ input[type="range"]::-moz-range-thumb {
   color: rgba(220, 235, 255, 0.9);
 }
 .tpick-val {
-  font-size: 0.82rem;
+  font-size: 1.05rem;
   color: rgba(180, 210, 235, 0.75);
   font-variant-numeric: tabular-nums;
-  min-width: 42px;
+  min-width: 48px;
   text-align: center;
 }
 
@@ -557,9 +557,9 @@ function initAudio() {
   reverbNode.connect(cueGain);
 
   // Pre-generate noise buffers
-  noiseBuffers.brown = makeNoiseBuf(16, 'brown');
-  noiseBuffers.pink  = makeNoiseBuf(14, 'pink');
-  noiseBuffers.white = makeNoiseBuf(6,  'white');
+  noiseBuffers.brown = makeNoiseBuf(8, 'brown');
+  noiseBuffers.pink  = makeNoiseBuf(7, 'pink');
+  noiseBuffers.white = makeNoiseBuf(4, 'white');
 }
 
 function makeNoiseBuf(secs, type) {
@@ -969,27 +969,27 @@ function tick(ts) {
 // ---- Session control ----
 function startSession() {
   initAudio();
-  if (ctx.state === 'suspended') ctx.resume();
 
   S.running = true; S.paused = false;
   S.totalSecs = S.totalMinutes * 60;
   S.totalElapsed = 0; S.phaseElapsed = 0;
   S.lastTs = 0; S.phase = 'inhale';
 
-  startBg(S.preset);
-
-  // Start circle anim + first cue after short fade-in
-  setTimeout(() => {
-    setPhaseAnim('inhale', S.inhaleDur);
-    playCue('inhale', S.preset);
-    updateDisplay();
-    S.raf = requestAnimationFrame(tick);
-  }, 600);
-
   document.getElementById('settingsPanel').classList.add('locked');
   document.getElementById('startBtn').disabled = true;
   document.getElementById('pauseBtn').disabled = false;
   document.getElementById('stopBtn').disabled  = false;
+
+  // iOS: ctx.resume() is async — ALL audio must start inside .then()
+  ctx.resume().then(() => {
+    startBg(S.preset);
+    setTimeout(() => {
+      setPhaseAnim('inhale', S.inhaleDur);
+      playCue('inhale', S.preset);
+      updateDisplay();
+      S.raf = requestAnimationFrame(tick);
+    }, 600);
+  });
 }
 
 function pauseSession() {
