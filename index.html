@@ -519,6 +519,22 @@ input[type="range"]::-moz-range-thumb {
       </div>
     </div>
 
+    <div class="srow">
+      <span class="slabel">배경음량</span>
+      <div class="slider-wrap">
+        <input type="range" id="bgVolSlider" min="0" max="100" value="70">
+        <span class="sval" id="bgVolVal">70%</span>
+      </div>
+    </div>
+
+    <div class="srow">
+      <span class="slabel">큐 음량</span>
+      <div class="slider-wrap">
+        <input type="range" id="cueVolSlider" min="0" max="100" value="70">
+        <span class="sval" id="cueVolVal">70%</span>
+      </div>
+    </div>
+
   </div>
 
   <!-- Controls -->
@@ -546,10 +562,10 @@ function initAudio() {
   masterGain = ctx.createGain(); masterGain.gain.value = 0.78;
   masterGain.connect(ctx.destination);
 
-  bgGain = ctx.createGain(); bgGain.gain.value = 0.72;
+  bgGain = ctx.createGain(); bgGain.gain.value = S.bgVol * 0.9;
   bgGain.connect(masterGain);
 
-  cueGain = ctx.createGain(); cueGain.gain.value = 0.42;
+  cueGain = ctx.createGain(); cueGain.gain.value = S.cueVol * 0.6;
   cueGain.connect(masterGain);
 
   // Convolution reverb — small buffer, safe to do here
@@ -967,6 +983,8 @@ const S = {
   exhaleDur:    6,
   totalMinutes: 10,
   preset:       'waves',
+  bgVol:        0.70,   // 0–1, controls bgGain
+  cueVol:       0.70,   // 0–1, controls cueGain
   running:      false,
   paused:       false,
   phase:        'idle',   // 'inhale' | 'exhale' | 'idle'
@@ -976,6 +994,12 @@ const S = {
   lastTs:       0,
   raf:          null,
 };
+
+function applyVolumes() {
+  if (!bgGain || !cueGain) return;
+  bgGain.gain.setTargetAtTime(S.bgVol * 0.9, ctx.currentTime, 0.05);
+  cueGain.gain.setTargetAtTime(S.cueVol * 0.6, ctx.currentTime, 0.05);
+}
 
 // ---- Circle animation ----
 const ring1 = document.getElementById('ring1');
@@ -1067,20 +1091,34 @@ function tick(ts) {
   S.raf = requestAnimationFrame(tick);
 }
 
+// ---- iOS audio unlock ----
+// Must be called SYNCHRONOUSLY inside a user-gesture handler (touchstart or click).
+// Plays a short real sound (not silent) so iOS truly unlocks WebAudio.
+function iosAudioUnlock() {
+  initAudio();
+  ensureBuffers();
+  applyVolumes();
+  try {
+    const sr = ctx.sampleRate;
+    const frames = Math.ceil(sr * 0.08); // 80ms soft chirp
+    const buf = ctx.createBuffer(1, frames, sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < frames; i++) {
+      // 440Hz sine with fast fadeout, gain 0.02 (barely audible)
+      d[i] = Math.sin(2 * Math.PI * 440 * i / sr) * Math.max(0, 1 - i / frames) * 0.02;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+  } catch(e) {}
+  ctx.resume(); // synchronous call — iOS honours this inside gesture handler
+}
+
 // ---- Session control ----
 function startSession() {
-  initAudio();
-  ensureBuffers(); // generate buffers synchronously (buffers pre-generated on first touch, this is a no-op)
-
-  // iOS: play silent buffer + resume SYNCHRONOUSLY in user-gesture context
-  // iOS ignores ctx.resume() called from .then() — must be synchronous here
-  try {
-    const sb = ctx.createBuffer(1, 1, ctx.sampleRate);
-    const ss = ctx.createBufferSource(); ss.buffer = sb;
-    ss.connect(ctx.destination); ss.start(0);
-  } catch(e) {}
-  ctx.resume(); // intentionally NOT awaited — iOS needs this synchronous call
-
+  // Audio unlock already called by the button's touchstart handler.
+  // On desktop (click only), iosAudioUnlock is called just before this.
   S.running = true; S.paused = false;
   S.totalSecs = S.totalMinutes * 60;
   S.totalElapsed = 0; S.phaseElapsed = 0;
@@ -1091,7 +1129,7 @@ function startSession() {
   document.getElementById('pauseBtn').disabled = false;
   document.getElementById('stopBtn').disabled  = false;
 
-  // Small delay to let ctx.resume() take effect before scheduling audio
+  // 300ms grace period: ctx.resume() resolves asynchronously, audio needs context running
   setTimeout(() => {
     startBg(S.preset);
     setPhaseAnim('inhale', S.inhaleDur);
@@ -1193,26 +1231,49 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
   });
 });
 
-// iOS: touchstart fires before click — call resume synchronously inside gesture handler
-// This is the most reliable way to unblock audio on iOS Safari
-document.getElementById('startBtn').addEventListener('touchstart', () => {
-  initAudio();
-  ensureBuffers();
-  try {
-    const sb = ctx.createBuffer(1, 1, ctx.sampleRate);
-    const ss = ctx.createBufferSource(); ss.buffer = sb;
-    ss.connect(ctx.destination); ss.start(0);
-  } catch(e) {}
-  ctx.resume();
-}, { passive: true });
+// Start button: touchstart fires BEFORE click on iOS.
+// We do the audio unlock in touchstart (synchronous gesture context) with e.preventDefault()
+// so iOS doesn't also fire a click. Desktop gets click only.
+let _startTouched = false;
+document.getElementById('startBtn').addEventListener('touchstart', (e) => {
+  if (document.getElementById('startBtn').disabled) return;
+  _startTouched = true;
+  e.preventDefault(); // Block subsequent click event on this touch
+  iosAudioUnlock();
+  startSession();
+}, { passive: false });
 
-document.getElementById('startBtn').addEventListener('click', startSession);
+document.getElementById('startBtn').addEventListener('click', () => {
+  if (_startTouched) { _startTouched = false; return; } // Already handled by touchstart
+  iosAudioUnlock(); // Desktop: unlock + resume in click handler (also a gesture)
+  startSession();
+});
+
 document.getElementById('pauseBtn').addEventListener('click', pauseSession);
 document.getElementById('stopBtn').addEventListener('click',  stopSession);
+
+// Volume sliders
+const bgVolSlider  = document.getElementById('bgVolSlider');
+const cueVolSlider = document.getElementById('cueVolSlider');
+
+bgVolSlider.addEventListener('input', () => {
+  S.bgVol = +bgVolSlider.value / 100;
+  document.getElementById('bgVolVal').textContent = bgVolSlider.value + '%';
+  applyVolumes();
+  updateSliderFill(bgVolSlider);
+});
+cueVolSlider.addEventListener('input', () => {
+  S.cueVol = +cueVolSlider.value / 100;
+  document.getElementById('cueVolVal').textContent = cueVolSlider.value + '%';
+  applyVolumes();
+  updateSliderFill(cueVolSlider);
+});
 
 // Init slider fills
 updateSliderFill(inhaleSlider);
 updateSliderFill(exhaleSlider);
+updateSliderFill(bgVolSlider);
+updateSliderFill(cueVolSlider);
 
 // ---- iOS audio unlock: pre-warm AudioContext on FIRST touch ----
 // iOS Safari requires a sound to be triggered synchronously in a user-gesture
