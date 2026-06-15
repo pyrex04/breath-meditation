@@ -609,9 +609,55 @@ function createReverb() {
   return conv;
 }
 
+// ---- Meditation Melody ----
+// A slow pentatonic melody (A minor penta) plays over every background preset.
+// Notes walk stepwise, each lasting 6-11 s with soft attack and long decay.
+// Volume is very low so it blends under the ambient texture.
+
+let melodyTimer  = null;
+let melodyIdx    = 4;  // start mid-scale
+const PENTA = [110, 130.81, 146.83, 164.81, 196, 220, 261.63, 293.66, 329.63, 392, 440];
+//              A2   C3      D3      E3      G3   A3   C4      D4      E4      G4   A4
+
+function scheduleMelody() {
+  if (!S.running || S.paused || !ctx) return;
+
+  // Stepwise random walk — mostly moves ±1, occasionally ±2
+  const steps = [-2,-1,-1,-1,-1, 0, 0, 1, 1, 1, 1, 2];
+  melodyIdx = Math.max(1, Math.min(PENTA.length - 2,
+    melodyIdx + steps[Math.floor(Math.random() * steps.length)]));
+  const freq = PENTA[melodyIdx];
+  const dur  = 6 + Math.random() * 5;   // 6–11 s per note
+  const t    = ctx.currentTime + 0.05;
+
+  // Bowl-like timbre: fundamental + 2 inharmonic partials
+  const mG = ctx.createGain();
+  mG.gain.setValueAtTime(0.001, t);
+  mG.gain.linearRampToValueAtTime(0.065, t + 1.2);   // slow swell
+  mG.gain.setValueAtTime(0.065, t + dur * 0.4);
+  mG.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  mG.connect(bgGain);
+
+  [[1, 1], [2.756, 0.22], [5.404, 0.07]].forEach(([r, a]) => {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.value = freq * r;
+    const g = ctx.createGain(); g.gain.value = a;
+    o.connect(g); g.connect(mG);
+    o.start(t); o.stop(t + dur + 0.1);
+  });
+
+  // Next note starts just before this one ends (slight overlap for continuity)
+  melodyTimer = setTimeout(scheduleMelody, (dur - 1.5) * 1000);
+}
+
+function stopMelody() {
+  if (melodyTimer) { clearTimeout(melodyTimer); melodyTimer = null; }
+}
+
 // ---- Background Music ----
 
 function stopBg() {
+  stopMelody();
   bgNodes.forEach(n => { try { n.stop(); } catch(e) {} try { n.disconnect(); } catch(e) {} });
   bgNodes = [];
 }
@@ -626,6 +672,8 @@ function startBg(preset) {
     nature:  startBgNature,
     chime:   startBgChime,
   }[preset] || startBgWaves)(t);
+  // Melody starts a beat after ambient texture kicks in
+  melodyTimer = setTimeout(scheduleMelody, 1500);
 }
 
 function startBgWaves(t) {
@@ -1023,6 +1071,13 @@ function tick(ts) {
 function startSession() {
   initAudio();
 
+  // iOS: play a silent buffer synchronously to guarantee audio unlock
+  try {
+    const sb = ctx.createBuffer(1, 1, ctx.sampleRate);
+    const ss = ctx.createBufferSource(); ss.buffer = sb;
+    ss.connect(ctx.destination); ss.start(0);
+  } catch(e) {}
+
   S.running = true; S.paused = false;
   S.totalSecs = S.totalMinutes * 60;
   S.totalElapsed = 0; S.phaseElapsed = 0;
@@ -1048,14 +1103,13 @@ function startSession() {
 
 function pauseSession() {
   if (S.paused) {
-    // Resume
     S.paused = false; S.lastTs = 0;
-    ctx.resume();
+    ctx.resume().then(() => { if (!melodyTimer) scheduleMelody(); });
     document.getElementById('pauseBtn').textContent = '일시정지';
     S.raf = requestAnimationFrame(tick);
   } else {
-    // Pause
     S.paused = true;
+    stopMelody();
     cancelAnimationFrame(S.raf);
     ctx.suspend();
     document.getElementById('pauseBtn').textContent = '계속하기';
@@ -1147,10 +1201,30 @@ document.getElementById('stopBtn').addEventListener('click',  stopSession);
 updateSliderFill(inhaleSlider);
 updateSliderFill(exhaleSlider);
 
-// ---- iOS: resume AudioContext on any touch (iOS suspends on background) ----
+// ---- iOS audio unlock: pre-warm AudioContext on FIRST touch ----
+// iOS Safari requires a sound to be triggered synchronously in a user-gesture
+// handler. We do this on the very first touch (before Start is ever pressed)
+// so the context is already live when the user taps Start.
+(function() {
+  function iosUnlock() {
+    initAudio();
+    const silBuf = ctx.createBuffer(1, 1, ctx.sampleRate);
+    const silSrc = ctx.createBufferSource();
+    silSrc.buffer = silBuf;
+    silSrc.connect(ctx.destination);
+    silSrc.start(0);
+    ctx.resume();
+    document.removeEventListener('touchstart', iosUnlock, true);
+    document.removeEventListener('touchend',   iosUnlock, true);
+  }
+  document.addEventListener('touchstart', iosUnlock, true);
+  document.addEventListener('touchend',   iosUnlock, true);
+})();
+
+// ---- iOS: resume AudioContext when app returns from background ----
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && ctx && S.running && !S.paused) {
-    ctx.resume();
+    ctx.resume().then(() => { if (!melodyTimer) scheduleMelody(); });
   }
 });
 
