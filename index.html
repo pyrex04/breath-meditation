@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>호흡 명상</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#060914">
+
+<!-- iOS Safari PWA -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="호흡 명상">
+<link rel="apple-touch-icon" href="icon-180.png">
+
+<!-- Prevent iOS bounce / tap highlight -->
+<meta name="format-detection" content="telephone=no">
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Prevent iOS bounce scroll & tap highlight */
+html { height: -webkit-fill-available; }
+body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+
+:root {
+  --inhale-color: rgba(80, 200, 255, 0.6);
+  --exhale-color: rgba(180, 120, 255, 0.5);
+  --bg-dark: #06090f;
+  --text-primary: rgba(200, 220, 240, 0.85);
+  --text-muted: rgba(140, 180, 210, 0.5);
+  --panel-bg: rgba(255,255,255,0.03);
+  --panel-border: rgba(255,255,255,0.07);
+}
+
+body {
+  background: var(--bg-dark);
+  min-height: 100vh;
+  font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--text-primary);
+  overflow-x: hidden;
+  user-select: none;
+}
+
+/* Animated ambient background */
+.bg-ambient {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 25% 35%, rgba(20, 60, 120, 0.35) 0%, transparent 100%),
+    radial-gradient(ellipse 50% 60% at 75% 65%, rgba(60, 20, 100, 0.3) 0%, transparent 100%),
+    radial-gradient(ellipse 80% 80% at 50% 50%, rgba(8, 15, 30, 0.8) 0%, transparent 100%);
+  animation: ambientBreath 12s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes ambientBreath {
+  from { opacity: 0.7; }
+  to   { opacity: 1; }
+}
+
+/* Subtle star dots */
+.bg-stars {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(1px 1px at 15% 20%, rgba(200,220,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 35% 55%, rgba(200,220,255,0.2) 0%, transparent 100%),
+    radial-gradient(1px 1px at 60% 15%, rgba(200,220,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 80% 40%, rgba(200,220,255,0.2) 0%, transparent 100%),
+    radial-gradient(1px 1px at 90% 75%, rgba(200,220,255,0.15) 0%, transparent 100%),
+    radial-gradient(1px 1px at 45% 85%, rgba(200,220,255,0.2) 0%, transparent 100%),
+    radial-gradient(1px 1px at 10% 70%, rgba(200,220,255,0.25) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 70% 90%, rgba(200,220,255,0.15) 0%, transparent 100%);
+}
+
+/* ===== LAYOUT ===== */
+.app {
+  position: relative;
+  z-index: 1;
+  max-width: 460px;
+  margin: 0 auto;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;   /* iOS Safari */
+  display: flex;
+  flex-direction: column;
+  /* Respect iOS notch / home indicator */
+  padding: calc(16px + env(safe-area-inset-top))
+           calc(18px + env(safe-area-inset-right))
+           calc(28px + env(safe-area-inset-bottom))
+           calc(18px + env(safe-area-inset-left));
+}
+
+/* ===== HEADER ===== */
+header {
+  text-align: center;
+  padding: 10px 0 4px;
+}
+header h1 {
+  font-size: 1.1rem;
+  font-weight: 300;
+  letter-spacing: 0.4em;
+  color: rgba(160, 200, 230, 0.7);
+}
+header .sub {
+  font-size: 0.68rem;
+  letter-spacing: 0.25em;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+/* ===== CIRCLE SECTION ===== */
+.circle-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0;
+  min-height: 260px;
+}
+
+.breath-wrap {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Rings */
+.ring {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+.ring-1 {
+  inset: 0;
+  border: 1px solid rgba(100, 170, 220, 0.12);
+  transition: transform 0.6s ease, border-color 0.8s ease;
+}
+.ring-2 {
+  inset: 22px;
+  border: 1px solid rgba(100, 170, 220, 0.18);
+  transition: transform 0.6s ease;
+}
+.ring-3 {
+  inset: 44px;
+  border: 1.5px solid rgba(100, 170, 220, 0.3);
+  background: radial-gradient(circle, rgba(50, 120, 180, 0.12) 0%, rgba(20, 60, 120, 0.06) 60%, transparent 100%);
+  box-shadow: 0 0 30px rgba(60, 140, 220, 0.1), inset 0 0 30px rgba(60, 140, 220, 0.05);
+  transition: transform 0.6s ease, border-color 0.8s ease, box-shadow 0.8s ease, background 0.8s ease;
+}
+
+/* Center label */
+.center-label {
+  position: absolute;
+  text-align: center;
+  pointer-events: none;
+  z-index: 2;
+}
+.center-phase {
+  font-size: 1rem;
+  font-weight: 300;
+  letter-spacing: 0.15em;
+  color: rgba(200, 225, 248, 0.85);
+  transition: color 1s ease;
+}
+.center-count {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-top: 5px;
+  font-variant-numeric: tabular-nums;
+  min-height: 1.1em;
+}
+
+/* Timer */
+.timer-area {
+  margin-top: 22px;
+  text-align: center;
+}
+.timer-num {
+  font-size: 2.2rem;
+  font-weight: 100;
+  letter-spacing: 0.05em;
+  color: rgba(180, 210, 235, 0.65);
+  font-variant-numeric: tabular-nums;
+}
+.prog-bar {
+  width: 140px;
+  height: 2px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 1px;
+  margin: 10px auto 0;
+  overflow: hidden;
+}
+.prog-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, rgba(80, 180, 255, 0.7), rgba(180, 120, 255, 0.7));
+  border-radius: 1px;
+  transition: width 1s linear;
+}
+
+/* ===== SETTINGS ===== */
+.settings {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-top: 14px;
+  transition: opacity 0.4s ease;
+}
+
+.settings.locked {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.srow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.srow:last-child { margin-bottom: 0; }
+
+.slabel {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  width: 48px;
+  flex-shrink: 0;
+}
+
+/* Sliders */
+.slider-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  flex: 1;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(80, 160, 240, 0.5) var(--pct, 0%), rgba(255,255,255,0.1) var(--pct, 0%));
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;   /* larger for touch */
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(100, 180, 255, 0.85);
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(100, 180, 255, 0.5);
+  transition: transform 0.1s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+/* Firefox */
+input[type="range"]::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%; border: none;
+  background: rgba(100, 180, 255, 0.85);
+  box-shadow: 0 0 8px rgba(100, 180, 255, 0.5);
+  cursor: pointer;
+}
+/* Increase touch target for iOS buttons */
+.tpick-btn, .ctrl { touch-action: manipulation; }
+.preset-btn { touch-action: manipulation; }
+
+.sval {
+  font-size: 0.76rem;
+  color: rgba(180, 210, 235, 0.7);
+  width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sound presets */
+.preset-row {
+  flex: 1;
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.preset-btn:hover {
+  background: rgba(100, 180, 255, 0.08);
+  border-color: rgba(100, 180, 255, 0.25);
+  color: rgba(200, 230, 255, 0.8);
+}
+.preset-btn.active {
+  background: rgba(80, 160, 255, 0.14);
+  border-color: rgba(100, 180, 255, 0.45);
+  color: rgba(200, 230, 255, 0.9);
+}
+
+/* Time picker */
+.time-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+.tpick-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 7px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(180, 210, 235, 0.6);
+  font-size: 1.05rem;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.tpick-btn:hover {
+  background: rgba(100, 180, 255, 0.1);
+  border-color: rgba(100, 180, 255, 0.3);
+  color: rgba(220, 235, 255, 0.9);
+}
+.tpick-val {
+  font-size: 0.82rem;
+  color: rgba(180, 210, 235, 0.75);
+  font-variant-numeric: tabular-nums;
+  min-width: 42px;
+  text-align: center;
+}
+
+/* ===== CONTROLS ===== */
+.controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 14px;
+}
+
+.ctrl {
+  border: none;
+  border-radius: 40px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.1em;
+  font-size: 0.82rem;
+  transition: all 0.2s ease;
+}
+.ctrl:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.ctrl-start {
+  background: linear-gradient(135deg, rgba(50, 120, 200, 0.75), rgba(90, 70, 200, 0.75));
+  border: 1px solid rgba(100, 160, 255, 0.25);
+  color: rgba(220, 235, 255, 0.92);
+  padding: 11px 32px;
+  box-shadow: 0 4px 20px rgba(50, 100, 200, 0.2);
+}
+.ctrl-start:not(:disabled):hover {
+  background: linear-gradient(135deg, rgba(70, 140, 220, 0.85), rgba(110, 90, 220, 0.85));
+  box-shadow: 0 4px 28px rgba(70, 130, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.ctrl-sec {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-muted);
+  padding: 11px 20px;
+}
+.ctrl-sec:not(:disabled):hover {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.15);
+  color: rgba(200, 225, 248, 0.8);
+}
+
+/* ===== iOS INSTALL BANNER ===== */
+.install-banner {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  background: rgba(50, 110, 200, 0.12);
+  border: 1px solid rgba(80, 150, 255, 0.2);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  font-size: 0.72rem;
+  color: rgba(180, 215, 255, 0.8);
+  line-height: 1.4;
+}
+.install-banner.show { display: flex; }
+.install-banner .ib-icon { font-size: 1.1rem; flex-shrink: 0; }
+.install-banner .ib-close {
+  margin-left: auto; background: none; border: none;
+  color: rgba(180, 215, 255, 0.5); font-size: 1rem; cursor: pointer;
+  padding: 2px 4px; flex-shrink: 0;
+}
+
+/* ===== COMPLETION ANIMATION ===== */
+@keyframes completePulse {
+  0%   { transform: scale(1);   opacity: 1; }
+  25%  { transform: scale(1.25); opacity: 0.9; }
+  50%  { transform: scale(1);   opacity: 1; }
+  75%  { transform: scale(1.15); opacity: 0.9; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+.ring-3.complete-anim {
+  animation: completePulse 2.2s ease-in-out;
+}
+
+</style>
+</head>
+<body>
+
+<div class="bg-ambient"></div>
+<div class="bg-stars"></div>
+
+<div class="app" id="app">
+
+  <!-- iOS install hint (shown only in iOS Safari, not in standalone mode) -->
+  <div class="install-banner" id="installBanner">
+    <span class="ib-icon">📲</span>
+    <span>Safari 하단 <strong>공유 버튼 → 홈 화면에 추가</strong>를 누르면 앱처럼 설치할 수 있습니다.</span>
+    <button class="ib-close" id="installClose" aria-label="닫기">✕</button>
+  </div>
+
+  <header>
+    <h1>호흡 명상</h1>
+    <p class="sub">BREATHING MEDITATION</p>
+  </header>
+
+  <!-- Circle -->
+  <div class="circle-section">
+    <div class="breath-wrap" id="breathWrap">
+      <div class="ring ring-1" id="ring1"></div>
+      <div class="ring ring-2" id="ring2"></div>
+      <div class="ring ring-3" id="ring3"></div>
+      <div class="center-label">
+        <div class="center-phase" id="phaseText">준비</div>
+        <div class="center-count" id="phaseCount"></div>
+      </div>
+    </div>
+
+    <div class="timer-area">
+      <div class="timer-num" id="timerNum">10:00</div>
+      <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="settings" id="settingsPanel">
+
+    <div class="srow">
+      <span class="slabel">사운드</span>
+      <div class="preset-row" id="presetRow">
+        <button class="preset-btn active" data-preset="waves">🌊 파도</button>
+        <button class="preset-btn" data-preset="bowl">🔔 싱잉볼</button>
+        <button class="preset-btn" data-preset="crystal">💎 수정</button>
+        <button class="preset-btn" data-preset="nature">🌿 자연</button>
+        <button class="preset-btn" data-preset="chime">✨ 차임</button>
+      </div>
+    </div>
+
+    <div class="srow">
+      <span class="slabel">들숨</span>
+      <div class="slider-wrap">
+        <input type="range" id="inhaleSlider" min="1" max="30" value="4">
+        <span class="sval" id="inhaleVal">4초</span>
+      </div>
+    </div>
+
+    <div class="srow">
+      <span class="slabel">날숨</span>
+      <div class="slider-wrap">
+        <input type="range" id="exhaleSlider" min="1" max="30" value="6">
+        <span class="sval" id="exhaleVal">6초</span>
+      </div>
+    </div>
+
+    <div class="srow">
+      <span class="slabel">시간</span>
+      <div class="time-pick">
+        <button class="tpick-btn" id="timeMinus">−</button>
+        <span class="tpick-val" id="timeVal">10분</span>
+        <button class="tpick-btn" id="timePlus">+</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="ctrl ctrl-start" id="startBtn">시작</button>
+    <button class="ctrl ctrl-sec" id="pauseBtn" disabled>일시정지</button>
+    <button class="ctrl ctrl-sec" id="stopBtn" disabled>종료</button>
+  </div>
+
+</div>
+
+<script>
+// ===========================================================
+//  AUDIO ENGINE
+// ===========================================================
+let ctx = null;
+let masterGain, bgGain, cueGain, reverbNode;
+let bgNodes = [];
+let noiseBuffers = {};
+
+function initAudio() {
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  masterGain = ctx.createGain(); masterGain.gain.value = 0.78;
+  masterGain.connect(ctx.destination);
+
+  bgGain = ctx.createGain(); bgGain.gain.value = 0.58;
+  bgGain.connect(masterGain);
+
+  cueGain = ctx.createGain(); cueGain.gain.value = 0.42;
+  cueGain.connect(masterGain);
+
+  // Convolution reverb for cue sounds
+  reverbNode = createReverb();
+  reverbNode.connect(cueGain);
+
+  // Pre-generate noise buffers
+  noiseBuffers.brown = makeNoiseBuf(16, 'brown');
+  noiseBuffers.pink  = makeNoiseBuf(14, 'pink');
+  noiseBuffers.white = makeNoiseBuf(6,  'white');
+}
+
+function makeNoiseBuf(secs, type) {
+  const sr  = ctx.sampleRate;
+  const buf = ctx.createBuffer(2, sr * secs, sr);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0, last=0;
+    for (let i = 0; i < d.length; i++) {
+      const w = Math.random() * 2 - 1;
+      if (type === 'brown') {
+        d[i] = (last + 0.02 * w) / 1.02;
+        last = d[i];
+        d[i] *= 3.5;
+      } else if (type === 'pink') {
+        // Paul Kellet's pink noise approximation
+        b0 = 0.99886*b0 + w*0.0555179; b1 = 0.99332*b1 + w*0.0750759;
+        b2 = 0.96900*b2 + w*0.1538520; b3 = 0.86650*b3 + w*0.3104856;
+        b4 = 0.55000*b4 + w*0.5329522; b5 = -0.7616*b5 - w*0.0168980;
+        d[i] = (b0+b1+b2+b3+b4+b5+b6+w*0.5362) * 0.11;
+        b6 = w * 0.115926;
+      } else {
+        d[i] = w;
+      }
+    }
+  }
+  return buf;
+}
+
+function createReverb() {
+  const conv = ctx.createConvolver();
+  const sr = ctx.sampleRate;
+  const len = Math.floor(sr * 2.8);
+  const buf = ctx.createBuffer(2, len, sr);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, 2.2) * (c===0 ? 1 : 0.98);
+    }
+  }
+  conv.buffer = buf;
+  return conv;
+}
+
+// ---- Background Music ----
+
+function stopBg() {
+  bgNodes.forEach(n => { try { n.stop(); } catch(e) {} try { n.disconnect(); } catch(e) {} });
+  bgNodes = [];
+}
+
+function startBg(preset) {
+  stopBg();
+  const t = ctx.currentTime + 0.05;
+  ({
+    waves:   startBgWaves,
+    bowl:    startBgBowl,
+    crystal: startBgCrystal,
+    nature:  startBgNature,
+    chime:   startBgChime,
+  }[preset] || startBgWaves)(t);
+}
+
+function startBgWaves(t) {
+  // Brown noise + slow filter LFO + volume swell
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffers.brown;
+  src.loop = true;
+
+  const filt = ctx.createBiquadFilter();
+  filt.type = 'lowpass'; filt.frequency.value = 320; filt.Q.value = 0.7;
+
+  const lfo = ctx.createOscillator();
+  lfo.frequency.value = 0.055; // ~18s cycle
+  const lfoG = ctx.createGain(); lfoG.gain.value = 160;
+  lfo.connect(lfoG); lfoG.connect(filt.frequency);
+
+  const volLfo = ctx.createOscillator(); volLfo.frequency.value = 0.055;
+  const volG = ctx.createGain(); volG.gain.value = 0.22;
+  const dcG  = ctx.createGain(); dcG.gain.value  = 0.7;
+  volLfo.connect(volG); volG.connect(dcG.gain);
+
+  // Bass resonance
+  const bass = ctx.createOscillator(); bass.frequency.value = 52; bass.type = 'sine';
+  const bassG = ctx.createGain(); bassG.gain.value = 0.09;
+  bass.connect(bassG); bassG.connect(bgGain);
+
+  src.connect(filt); filt.connect(dcG); dcG.connect(bgGain);
+  src.start(t); lfo.start(t); volLfo.start(t); bass.start(t);
+  bgNodes.push(src, lfo, volLfo, bass);
+}
+
+function startBgBowl(t) {
+  // 432Hz-based harmonic drone with gentle tremolo
+  [[54, 0.28], [108, 0.20], [216, 0.14], [432, 0.08]].forEach(([f, amp], i) => {
+    const osc = ctx.createOscillator(); osc.frequency.value = f; osc.type = 'sine';
+    const trem = ctx.createOscillator(); trem.frequency.value = 0.28 + i * 0.06;
+    const tremG = ctx.createGain(); tremG.gain.value = amp * 0.18;
+    const dcG   = ctx.createGain(); dcG.gain.value   = amp * 0.82;
+    trem.connect(tremG); tremG.connect(dcG.gain);
+    osc.connect(dcG); dcG.connect(bgGain);
+    osc.start(t); trem.start(t);
+    bgNodes.push(osc, trem);
+  });
+  // Subtle noise bed
+  const noise = ctx.createBufferSource(); noise.buffer = noiseBuffers.brown; noise.loop = true;
+  const nf = ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 140; nf.Q.value = 0.4;
+  const ng = ctx.createGain(); ng.gain.value = 0.035;
+  noise.connect(nf); nf.connect(ng); ng.connect(bgGain);
+  noise.start(t); bgNodes.push(noise);
+}
+
+function startBgCrystal(t) {
+  // Solfeggio-inspired: 174, 396, 528 with binaural offset
+  [[174, 0.14], [264, 0.12], [396, 0.10], [528, 0.07]].forEach(([f, amp]) => {
+    const L = ctx.createOscillator(); L.frequency.value = f;
+    const R = ctx.createOscillator(); R.frequency.value = f + 0.6; // beat frequency
+    const panL = ctx.createStereoPanner(); panL.pan.value = -0.4;
+    const panR = ctx.createStereoPanner(); panR.pan.value =  0.4;
+    const g = ctx.createGain(); g.gain.value = amp;
+    L.connect(panL); R.connect(panR); panL.connect(g); panR.connect(g); g.connect(bgGain);
+    L.start(t); R.start(t);
+    bgNodes.push(L, R);
+  });
+}
+
+function startBgNature(t) {
+  // Pink noise (wind/forest feel)
+  const src = ctx.createBufferSource(); src.buffer = noiseBuffers.pink; src.loop = true;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.35;
+  const g = ctx.createGain(); g.gain.value = 0.13;
+  src.connect(bp); bp.connect(g); g.connect(bgGain);
+  src.start(t); bgNodes.push(src);
+
+  // Earth drone (D2)
+  const osc = ctx.createOscillator(); osc.frequency.value = 73.4; osc.type = 'sine';
+  const trem = ctx.createOscillator(); trem.frequency.value = 0.18;
+  const tremG = ctx.createGain(); tremG.gain.value = 0.025;
+  const dcG   = ctx.createGain(); dcG.gain.value   = 0.075;
+  trem.connect(tremG); tremG.connect(dcG.gain);
+  osc.connect(dcG); dcG.connect(bgGain);
+  osc.start(t); trem.start(t); bgNodes.push(osc, trem);
+}
+
+function startBgChime(t) {
+  // Deep space: ultra-low drones
+  [[38, 0.12], [55, 0.09], [72, 0.06]].forEach(([f, amp], i) => {
+    const osc = ctx.createOscillator(); osc.frequency.value = f;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.04 + i * 0.015;
+    const lfoG = ctx.createGain(); lfoG.gain.value = amp * 0.28;
+    const dcG  = ctx.createGain(); dcG.gain.value  = amp * 0.72;
+    lfo.connect(lfoG); lfoG.connect(dcG.gain);
+    osc.connect(dcG); dcG.connect(bgGain);
+    osc.start(t); lfo.start(t); bgNodes.push(osc, lfo);
+  });
+  // High shimmer
+  const sh = ctx.createBufferSource(); sh.buffer = noiseBuffers.white; sh.loop = true;
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 5500;
+  const sg = ctx.createGain(); sg.gain.value = 0.012;
+  sh.connect(hp); hp.connect(sg); sg.connect(bgGain);
+  sh.start(t); bgNodes.push(sh);
+}
+
+// ---- Cue Sounds ----
+
+function playCue(type, preset) {
+  if (!ctx) return;
+  const t = ctx.currentTime + 0.06;
+  ({
+    waves:   playWavesCue,
+    bowl:    playBowlCue,
+    crystal: playCrystalCue,
+    nature:  playNatureCue,
+    chime:   playChimeCue,
+  }[preset] || playBowlCue)(type, t);
+}
+
+function bowlStrike(freq, dur, t) {
+  // Inharmonic partials mimicking a metal bowl
+  const parts = [[1,1],[2.756,0.42],[5.404,0.18],[8.933,0.07]];
+  const mG = ctx.createGain();
+  mG.gain.setValueAtTime(0.001, t);
+  mG.gain.exponentialRampToValueAtTime(0.32, t + 0.012);
+  mG.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  mG.connect(reverbNode);
+  parts.forEach(([r, a]) => {
+    const o = ctx.createOscillator(); o.frequency.value = freq * r; o.type = 'sine';
+    const g = ctx.createGain(); g.gain.value = a;
+    o.connect(g); g.connect(mG);
+    o.start(t); o.stop(t + dur + 0.1);
+  });
+}
+
+function playBowlCue(type, t) {
+  bowlStrike(type === 'inhale' ? 392 : 196, type === 'inhale' ? 4.5 : 6, t);
+}
+
+function playWavesCue(type, t) {
+  const dur = type === 'inhale' ? 2.8 : 2.2;
+  const src = ctx.createBufferSource(); src.buffer = noiseBuffers.white;
+  const bp  = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9;
+  const g   = ctx.createGain();
+  g.gain.setValueAtTime(0.001, t);
+  g.gain.linearRampToValueAtTime(0.38, t + dur*0.45);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  bp.frequency.setValueAtTime(type==='inhale' ? 380 : 1300, t);
+  bp.frequency.exponentialRampToValueAtTime(type==='inhale' ? 1300 : 300, t + dur);
+  src.connect(bp); bp.connect(g); g.connect(reverbNode);
+  src.start(t); src.stop(t + dur + 0.3);
+
+  // Gentle tone underneath
+  const tone = ctx.createOscillator(); tone.frequency.value = type==='inhale' ? 220 : 164;
+  const tG   = ctx.createGain();
+  tG.gain.setValueAtTime(0.001, t);
+  tG.gain.linearRampToValueAtTime(0.1, t + 0.35);
+  tG.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  tone.connect(tG); tG.connect(reverbNode);
+  tone.start(t); tone.stop(t + dur + 0.2);
+}
+
+function playCrystalCue(type, t) {
+  // Solfeggio: 741 (inhale - expression) vs 396 (exhale - release)
+  const freq = type === 'inhale' ? 741 : 396;
+  const dur  = type === 'inhale' ? 4   : 5;
+  const mG   = ctx.createGain();
+  mG.gain.setValueAtTime(0.001, t);
+  mG.gain.exponentialRampToValueAtTime(0.22, t + 0.04);
+  mG.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  mG.connect(reverbNode);
+  [1, 2, 3, 4].forEach((h, i) => {
+    const o = ctx.createOscillator(); o.frequency.value = freq * h; o.type = 'sine';
+    const g = ctx.createGain(); g.gain.value = [1, 0.28, 0.10, 0.04][i];
+    o.connect(g); g.connect(mG);
+    o.start(t); o.stop(t + dur + 0.15);
+  });
+}
+
+function playNatureCue(type, t) {
+  if (type === 'inhale') {
+    // Bird-like ascending chirp
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(620, t);
+    o.frequency.exponentialRampToValueAtTime(1850, t + 0.28);
+    o.frequency.exponentialRampToValueAtTime(1200, t + 0.55);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(0.18, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
+    o.connect(g); g.connect(reverbNode);
+    o.start(t); o.stop(t + 0.9);
+    // Second chirp with delay
+    setTimeout(() => {
+      const t2 = ctx.currentTime + 0.06;
+      const o2 = ctx.createOscillator(); o2.type = 'sine';
+      o2.frequency.setValueAtTime(800, t2);
+      o2.frequency.exponentialRampToValueAtTime(2000, t2 + 0.22);
+      const g2 = ctx.createGain();
+      g2.gain.setValueAtTime(0.001, t2);
+      g2.gain.linearRampToValueAtTime(0.12, t2 + 0.04);
+      g2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.5);
+      o2.connect(g2); g2.connect(reverbNode);
+      o2.start(t2); o2.stop(t2 + 0.7);
+    }, 420);
+  } else {
+    // Wind-like descending rustle
+    const src = ctx.createBufferSource(); src.buffer = noiseBuffers.pink;
+    const hp  = ctx.createBiquadFilter(); hp.type = 'highpass';
+    hp.frequency.setValueAtTime(2200, t);
+    hp.frequency.exponentialRampToValueAtTime(380, t + 2.5);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(0.14, t + 0.28);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 2.5);
+    src.connect(hp); hp.connect(g); g.connect(reverbNode);
+    src.start(t); src.stop(t + 3);
+  }
+}
+
+function playChimeCue(type, t) {
+  // Ascending or descending arpeggio
+  const up   = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
+  const down  = [261.63, 329.63, 392.00, 523.25]; // C4 E4 G4 C5
+  const freqs = type === 'inhale' ? up : down;
+  freqs.forEach((f, i) => {
+    const delay = i * 0.09;
+    const dur   = 3.2 - i * 0.25;
+    const st    = t + delay;
+    const o = ctx.createOscillator(); o.frequency.value = f; o.type = 'sine';
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.001, st);
+    g.gain.exponentialRampToValueAtTime(0.19 - i*0.03, st + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, st + dur);
+    o.connect(g); g.connect(reverbNode);
+    o.start(st); o.stop(st + dur + 0.15);
+  });
+}
+
+
+// ===========================================================
+//  STATE & TIMER
+// ===========================================================
+const S = {
+  inhaleDur:    4,
+  exhaleDur:    6,
+  totalMinutes: 10,
+  preset:       'waves',
+  running:      false,
+  paused:       false,
+  phase:        'idle',   // 'inhale' | 'exhale' | 'idle'
+  phaseElapsed: 0,
+  totalElapsed: 0,
+  totalSecs:    0,
+  lastTs:       0,
+  raf:          null,
+};
+
+// ---- Circle animation ----
+const ring1 = document.getElementById('ring1');
+const ring2 = document.getElementById('ring2');
+const ring3 = document.getElementById('ring3');
+const phaseText  = document.getElementById('phaseText');
+const phaseCount = document.getElementById('phaseCount');
+
+function setPhaseAnim(phase, dur) {
+  // Apply transition duration then transform
+  const ease = 'cubic-bezier(0.37, 0, 0.63, 1)';
+  const td = `${dur}s`;
+  ring1.style.transition = `transform ${td} ${ease}`;
+  ring2.style.transition = `transform ${td} ${ease}`;
+  ring3.style.transition = `transform ${td} ${ease}, border-color 0.8s ease, box-shadow 0.8s ease, background 0.8s ease`;
+
+  if (phase === 'inhale') {
+    ring1.style.transform = 'scale(1.14)';
+    ring2.style.transform = 'scale(1.19)';
+    ring3.style.transform = 'scale(1.33)';
+    ring1.style.borderColor = 'rgba(80, 200, 255, 0.22)';
+    ring3.style.borderColor = 'rgba(80, 210, 255, 0.62)';
+    ring3.style.boxShadow   = '0 0 55px rgba(60,190,255,0.25), inset 0 0 40px rgba(60,190,255,0.12)';
+    ring3.style.background  = 'radial-gradient(circle, rgba(50,170,255,0.22) 0%, rgba(20,110,200,0.1) 60%, transparent 100%)';
+    phaseText.textContent = '들이마세요';
+    phaseText.style.color = 'rgba(160,220,255,0.9)';
+  } else {
+    ring1.style.transform = 'scale(0.94)';
+    ring2.style.transform = 'scale(0.89)';
+    ring3.style.transform = 'scale(0.84)';
+    ring1.style.borderColor = 'rgba(160, 110, 230, 0.18)';
+    ring3.style.borderColor = 'rgba(180, 130, 255, 0.52)';
+    ring3.style.boxShadow   = '0 0 40px rgba(140,90,240,0.2), inset 0 0 30px rgba(140,90,240,0.1)';
+    ring3.style.background  = 'radial-gradient(circle, rgba(100,55,200,0.18) 0%, rgba(60,25,150,0.07) 60%, transparent 100%)';
+    phaseText.textContent = '내쉬세요';
+    phaseText.style.color = 'rgba(200,170,255,0.9)';
+  }
+}
+
+function resetCircle(label = '준비') {
+  ring1.style.transition = 'all 0.7s ease';
+  ring2.style.transition = 'all 0.7s ease';
+  ring3.style.transition = 'all 0.7s ease';
+  ring1.style.transform = 'scale(1)'; ring1.style.borderColor = '';
+  ring2.style.transform = 'scale(1)';
+  ring3.style.transform = 'scale(1)'; ring3.style.borderColor = ''; ring3.style.boxShadow = ''; ring3.style.background = '';
+  phaseText.textContent = label;
+  phaseText.style.color = '';
+  phaseCount.textContent = '';
+}
+
+function fmt(sec) {
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+  return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+}
+
+function updateDisplay() {
+  const rem = Math.max(0, S.totalSecs - S.totalElapsed);
+  document.getElementById('timerNum').textContent = fmt(rem);
+  const pct = Math.min(100, (S.totalElapsed / S.totalSecs) * 100);
+  document.getElementById('progFill').style.width = pct + '%';
+  // Phase countdown
+  const pDur = S.phase === 'inhale' ? S.inhaleDur : S.exhaleDur;
+  const rem2  = Math.max(0, Math.ceil(pDur - S.phaseElapsed));
+  phaseCount.textContent = S.running && !S.paused ? rem2 + '초' : '';
+}
+
+// ---- Tick ----
+function tick(ts) {
+  if (!S.running || S.paused) return;
+  if (!S.lastTs) S.lastTs = ts;
+  const dt = (ts - S.lastTs) / 1000;
+  S.lastTs = ts;
+
+  S.totalElapsed  += dt;
+  S.phaseElapsed  += dt;
+
+  if (S.totalElapsed >= S.totalSecs) { endSession(true); return; }
+
+  const pDur = S.phase === 'inhale' ? S.inhaleDur : S.exhaleDur;
+  if (S.phaseElapsed >= pDur) {
+    S.phaseElapsed = 0;
+    S.phase = S.phase === 'inhale' ? 'exhale' : 'inhale';
+    setPhaseAnim(S.phase, S.phase === 'inhale' ? S.inhaleDur : S.exhaleDur);
+    playCue(S.phase, S.preset);
+  }
+
+  updateDisplay();
+  S.raf = requestAnimationFrame(tick);
+}
+
+// ---- Session control ----
+function startSession() {
+  initAudio();
+  if (ctx.state === 'suspended') ctx.resume();
+
+  S.running = true; S.paused = false;
+  S.totalSecs = S.totalMinutes * 60;
+  S.totalElapsed = 0; S.phaseElapsed = 0;
+  S.lastTs = 0; S.phase = 'inhale';
+
+  startBg(S.preset);
+
+  // Start circle anim + first cue after short fade-in
+  setTimeout(() => {
+    setPhaseAnim('inhale', S.inhaleDur);
+    playCue('inhale', S.preset);
+    updateDisplay();
+    S.raf = requestAnimationFrame(tick);
+  }, 600);
+
+  document.getElementById('settingsPanel').classList.add('locked');
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').disabled = false;
+  document.getElementById('stopBtn').disabled  = false;
+}
+
+function pauseSession() {
+  if (S.paused) {
+    // Resume
+    S.paused = false; S.lastTs = 0;
+    ctx.resume();
+    document.getElementById('pauseBtn').textContent = '일시정지';
+    S.raf = requestAnimationFrame(tick);
+  } else {
+    // Pause
+    S.paused = true;
+    cancelAnimationFrame(S.raf);
+    ctx.suspend();
+    document.getElementById('pauseBtn').textContent = '계속하기';
+    phaseCount.textContent = '';
+  }
+}
+
+function stopSession() { endSession(false); }
+
+function endSession(completed) {
+  S.running = false; S.paused = false;
+  cancelAnimationFrame(S.raf);
+  stopBg();
+
+  if (completed) {
+    phaseText.textContent = '명상 완료';
+    phaseCount.textContent = '수고하셨습니다 🙏';
+    ring3.classList.add('complete-anim');
+    setTimeout(() => ring3.classList.remove('complete-anim'), 2500);
+  }
+
+  setTimeout(() => {
+    resetCircle('준비');
+    document.getElementById('timerNum').textContent = fmt(S.totalMinutes * 60);
+    document.getElementById('progFill').style.width = '0%';
+  }, completed ? 3500 : 800);
+
+  document.getElementById('settingsPanel').classList.remove('locked');
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').disabled = true;
+  document.getElementById('pauseBtn').textContent = '일시정지';
+  document.getElementById('stopBtn').disabled  = true;
+}
+
+
+// ===========================================================
+//  UI BINDINGS
+// ===========================================================
+
+// Slider fill helper
+function updateSliderFill(el) {
+  const min = +el.min, max = +el.max, val = +el.value;
+  el.style.setProperty('--pct', ((val - min) / (max - min) * 100) + '%');
+}
+
+const inhaleSlider = document.getElementById('inhaleSlider');
+const exhaleSlider = document.getElementById('exhaleSlider');
+
+inhaleSlider.addEventListener('input', () => {
+  S.inhaleDur = +inhaleSlider.value;
+  document.getElementById('inhaleVal').textContent = S.inhaleDur + '초';
+  updateSliderFill(inhaleSlider);
+});
+exhaleSlider.addEventListener('input', () => {
+  S.exhaleDur = +exhaleSlider.value;
+  document.getElementById('exhaleVal').textContent = S.exhaleDur + '초';
+  updateSliderFill(exhaleSlider);
+});
+
+document.getElementById('timeMinus').addEventListener('click', () => {
+  if (S.totalMinutes > 1) {
+    S.totalMinutes--;
+    document.getElementById('timeVal').textContent = S.totalMinutes + '분';
+    if (!S.running) document.getElementById('timerNum').textContent = fmt(S.totalMinutes * 60);
+  }
+});
+document.getElementById('timePlus').addEventListener('click', () => {
+  if (S.totalMinutes < 60) {
+    S.totalMinutes++;
+    document.getElementById('timeVal').textContent = S.totalMinutes + '분';
+    if (!S.running) document.getElementById('timerNum').textContent = fmt(S.totalMinutes * 60);
+  }
+});
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    S.preset = btn.dataset.preset;
+    if (S.running && !S.paused) startBg(S.preset); // swap bg live
+  });
+});
+
+document.getElementById('startBtn').addEventListener('click', startSession);
+document.getElementById('pauseBtn').addEventListener('click', pauseSession);
+document.getElementById('stopBtn').addEventListener('click',  stopSession);
+
+// Init slider fills
+updateSliderFill(inhaleSlider);
+updateSliderFill(exhaleSlider);
+
+// ---- iOS: resume AudioContext on any touch (iOS suspends on background) ----
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && ctx && S.running && !S.paused) {
+    ctx.resume();
+  }
+});
+
+// ---- iOS install banner: show in Safari but not in standalone ----
+(function() {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone === true;
+  const banner = document.getElementById('installBanner');
+  if (isIOS && !isStandalone && !localStorage.getItem('installDismissed')) {
+    banner.classList.add('show');
+  }
+  document.getElementById('installClose').addEventListener('click', () => {
+    banner.classList.remove('show');
+    localStorage.setItem('installDismissed', '1');
+  });
+})();
+
+// ---- Service Worker registration ----
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js', { scope: './' })
+      .catch(err => console.warn('SW registration failed:', err));
+  });
+}
+</script>
+</body>
+</html>
